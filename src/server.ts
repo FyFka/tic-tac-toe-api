@@ -1,21 +1,23 @@
-import WebSocket, { WebSocketServer } from "ws";
-import { IMessage, IRoom, IGameRoom, SocketEvents } from "./interfaces/IRoom";
+import WebSocket from "ws";
+import { IMessage, IRoom, SocketEvents } from "./interfaces/IRoom";
 import { v4 } from "uuid";
-import { handlerCreateRoom, handlerGetRooms } from "./handlers";
-
-export const wss = new WebSocketServer({ port: 8080 });
-export const rooms: IGameRoom[] = [];
+import { handleCreateRoom, handleGetRooms, handleJoinRoom } from "./handlers";
+import { wss } from "./constants";
+import { sendToClient } from "./sender";
 
 const eventDistributor = (ws: WebSocket.WebSocket, clientMessage: IMessage<unknown>) => {
   switch (clientMessage.event) {
     case SocketEvents.GET_ROOMS:
-      handlerGetRooms(ws);
+      handleGetRooms(ws);
       break;
     case SocketEvents.CREATE_ROOM:
-      handlerCreateRoom(ws, clientMessage.data as Partial<IRoom>);
+      handleCreateRoom(ws, clientMessage.data as Partial<IRoom>);
+      break;
+    case SocketEvents.JOIN_ROOM:
+      handleJoinRoom(ws, clientMessage.data as { id: string; password?: string });
       break;
     default:
-      ws.send(JSON.stringify({ event: SocketEvents.INCORRECT_EVENT, data: "Incorrect event" }));
+      sendToClient(ws, { event: SocketEvents.UNKNOWN_EVENT, data: { info: "Unknown event" } });
       break;
   }
 };
@@ -23,7 +25,11 @@ const eventDistributor = (ws: WebSocket.WebSocket, clientMessage: IMessage<unkno
 wss.on("connection", (ws) => {
   ws.id = v4();
   ws.on("message", (message) => {
-    const clientMessage = JSON.parse(message.toString()) as IMessage<unknown>;
-    eventDistributor(ws, clientMessage);
+    try {
+      const clientMessage = JSON.parse(message.toString()) as IMessage<unknown>;
+      eventDistributor(ws, clientMessage);
+    } catch (err) {
+      sendToClient(ws, { event: SocketEvents.UNKNOWN_EVENT, data: { info: "Unknown event" } });
+    }
   });
 });
