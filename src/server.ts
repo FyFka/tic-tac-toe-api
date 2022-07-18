@@ -1,12 +1,15 @@
 import WebSocket from "ws";
-import { IMessage, IRoom, SocketEvents } from "./interfaces/IRoom";
-import { v4 } from "uuid";
-import { handleCreateRoom, handleGetRooms, handleJoinRoom } from "./handlers";
+import { IRoom } from "./interfaces/IRoom";
+import { handleCanPlay, handleCreateRoom, handleGetRooms, handleJoinRoom, handlePing, handleTurn } from "./handlers";
 import { wss } from "./constants";
 import { sendToClient } from "./sender";
+import { IMessage, SocketEvents } from "./interfaces/IMessage";
 
-const eventDistributor = (ws: WebSocket.WebSocket, clientMessage: IMessage<unknown>) => {
+const eventDistributor = (ws: WebSocket, clientMessage: IMessage<unknown>) => {
   switch (clientMessage.event) {
+    case SocketEvents.PING:
+      handlePing(ws);
+      break;
     case SocketEvents.GET_ROOMS:
       handleGetRooms(ws);
       break;
@@ -16,14 +19,19 @@ const eventDistributor = (ws: WebSocket.WebSocket, clientMessage: IMessage<unkno
     case SocketEvents.JOIN_ROOM:
       handleJoinRoom(ws, clientMessage.data as { id: string; password?: string });
       break;
+    case SocketEvents.CAN_PLAY:
+      handleCanPlay(ws, clientMessage.data as { id: string });
+      break;
+    case SocketEvents.PICK:
+      handleTurn(ws, clientMessage.data as { id: string; row: number; cell: number });
+      break;
     default:
-      sendToClient(ws, { event: SocketEvents.UNKNOWN_EVENT, data: { info: "Unknown event" } });
+      sendToClient(ws, { event: SocketEvents.UNKNOWN_EVENT, data: { info: `Unknown event: ${clientMessage.event}` } });
       break;
   }
 };
 
 wss.on("connection", (ws) => {
-  ws.id = v4();
   ws.on("message", (message) => {
     try {
       const clientMessage = JSON.parse(message.toString()) as IMessage<unknown>;
