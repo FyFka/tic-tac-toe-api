@@ -1,11 +1,12 @@
 import { v4 } from "uuid";
 import WebSocket from "ws";
-import { activeRooms, rooms } from "./constants";
-import { getCurrentTurn, toGameRoom } from "./helpers";
+import { gameRooms, rooms } from "./constants";
+import { checkWin, getCurrentTurn, removeGameRoom, toActiveGameRoom } from "./helpers";
 import { IRoom } from "./interfaces/IRoom";
 import { sendToAllClients, sendToClient } from "./sender";
-import { GameSymbol } from "./interfaces/IPlayer";
+import { GameSymbol } from "./interfaces/IGameSymbol";
 import { SocketEvents } from "./interfaces/IMessage";
+import { GameResult } from "./interfaces/IGameResult";
 
 export const handlePing = (ws: WebSocket) => {
   sendToClient(ws, { event: SocketEvents.PONG });
@@ -23,6 +24,12 @@ export const handleCreateRoom = (ws: WebSocket, room: Partial<IRoom>) => {
     return sendToClient(ws, {
       event: SocketEvents.CREATE_ROOM_ERROR,
       data: { info: "Room name and size are required", field: "name" },
+    });
+  }
+  if (room.size < 3 || room.size > 12) {
+    return sendToClient(ws, {
+      event: SocketEvents.CREATE_ROOM_ERROR,
+      data: { info: "Room size must be between 3 and 12", field: "size" },
     });
   }
   const newRoom = {
@@ -56,55 +63,63 @@ export const handleJoinRoom = (ws: WebSocket, room: { id: string; password?: str
   targetRoom.players.set(ws, GameSymbol.UNKNOWN);
   if (targetRoom.players.size === 2) {
     rooms.splice(rooms.indexOf(targetRoom), 1);
-    activeRooms[targetRoom.id] = toGameRoom(targetRoom);
+    gameRooms[targetRoom.id] = toActiveGameRoom(targetRoom);
   }
   sendToClient(ws, { event: SocketEvents.JOIN_ROOM_SUCCESS, data: { id: targetRoom.id } });
   sendToAllClients({ event: SocketEvents.REMOVE_ROOM, data: { id: targetRoom.id } });
 };
 
 export const handleCanPlay = (ws: WebSocket, targetRoom: { id: string }) => {
-  const selectedRoom = rooms.find((r) => r.id === targetRoom.id) || activeRooms[targetRoom.id];
+  const selectedRoom = rooms.find((r) => r.id === targetRoom.id) || gameRooms[targetRoom.id];
   if (!selectedRoom || !selectedRoom.players.has(ws)) {
     return sendToClient(ws, { event: SocketEvents.CAN_PLAY_ERROR });
   }
   sendToClient(ws, { event: SocketEvents.CAN_PLAY_SUCCESS, data: { size: selectedRoom.size } });
-  if (activeRooms[targetRoom.id] && selectedRoom.players.size === 2) {
-    const turn = getCurrentTurn(activeRooms[targetRoom.id]);
-
+  if (gameRooms[targetRoom.id] && selectedRoom.players.size === 2) {
+    const turn = getCurrentTurn(gameRooms[targetRoom.id]);
     sendToClient(turn.currentTurn, {
       event: SocketEvents.SYMBOL,
-      data: { player: activeRooms[targetRoom.id].players.get(turn.currentTurn) },
+      data: { player: gameRooms[targetRoom.id].players.get(turn.currentTurn) },
     });
-
     sendToClient(turn.nextTurn, {
       event: SocketEvents.SYMBOL,
-      data: { player: activeRooms[targetRoom.id].players.get(turn.nextTurn) },
+      data: { player: gameRooms[targetRoom.id].players.get(turn.nextTurn) },
     });
   }
 };
 
 export const handleTurn = (ws: WebSocket, targetRoom: { id: string; row: number; cell: number }) => {
-  if (activeRooms[targetRoom.id] && activeRooms[targetRoom.id].players.size === 2) {
-    const selectedRoom = activeRooms[targetRoom.id];
-    const turn = getCurrentTurn(activeRooms[targetRoom.id]);
-
+  if (gameRooms[targetRoom.id] && gameRooms[targetRoom.id].players.size === 2) {
+    const selectedRoom = gameRooms[targetRoom.id];
+    const turn = getCurrentTurn(gameRooms[targetRoom.id]);
     if (turn.currentTurn !== ws) {
       return sendToClient(ws, { event: SocketEvents.TURN_ERROR, data: { info: "It's not your turn" } });
     }
     if (selectedRoom.board[targetRoom.row][targetRoom.cell] !== "") {
       return sendToClient(ws, { event: SocketEvents.TURN_ERROR, data: { info: "This cell is already taken" } });
     }
-
+    selectedRoom.turn += 1;
     selectedRoom.board[targetRoom.row][targetRoom.cell] = selectedRoom.players.get(turn.currentTurn)!;
     selectedRoom.isfirstPlayerTurn = !selectedRoom.isfirstPlayerTurn;
-
     sendToClient(turn.currentTurn, {
       event: SocketEvents.TURN,
-      data: { board: selectedRoom.board, turn: activeRooms[targetRoom.id].players.get(turn.nextTurn) },
+      data: { board: selectedRoom.board, turn: gameRooms[targetRoom.id].players.get(turn.nextTurn) },
     });
     sendToClient(turn.nextTurn, {
       event: SocketEvents.TURN,
-      data: { board: selectedRoom.board, turn: activeRooms[targetRoom.id].players.get(turn.nextTurn) },
+      data: { board: selectedRoom.board, turn: gameRooms[targetRoom.id].players.get(turn.nextTurn) },
     });
+    const result = checkWin(selectedRoom, targetRoom.row, targetRoom.cell, selectedRoom.players.get(turn.currentTurn)!);
+    if (result !== GameResult.IN_PROGRESS) {
+      sendToClient(turn.currentTurn, {
+        event: SocketEvents.GAME_RESULT,
+        data: { info: result },
+      });
+      sendToClient(turn.nextTurn, {
+        event: SocketEvents.GAME_RESULT,
+        data: { info: result },
+      });
+      removeGameRoom(targetRoom.id);
+    }
   }
 };

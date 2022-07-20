@@ -1,5 +1,5 @@
 import WebSocket from "ws";
-import { GameSymbol } from "./IPlayer";
+import { GameSymbol } from "./IGameSymbol";
 
 export interface IRoom {
   name: string;
@@ -15,4 +15,5 @@ export interface IGameRoom extends IRoom {
 export interface IActiveGameRoom extends IGameRoom {
   board: string[][];
   isfirstPlayerTurn: boolean;
+  turn: number;
 }

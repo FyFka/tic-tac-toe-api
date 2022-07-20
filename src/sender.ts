@@ -1,5 +1,4 @@
 import WebSocket from "ws";
-
 import { wss } from "./constants";
 import { IMessage } from "./interfaces/IMessage";
 
