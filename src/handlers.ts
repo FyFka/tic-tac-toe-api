@@ -37,9 +37,8 @@ export const handleCreateRoom = (ws: WebSocket, room: Partial<IRoom>) => {
     name: room.name,
     size: room.size,
     password: room?.password,
-    players: new Map(),
+    players: new Map([[ws, GameSymbol.UNKNOWN]]),
   };
-  newRoom.players.set(ws, GameSymbol.UNKNOWN);
   rooms.push(newRoom);
   const { id, name, size } = newRoom;
   sendToClient(ws, { event: SocketEvents.CREATE_ROOM_SUCCESS, data: { id } });
@@ -113,13 +112,33 @@ export const handleTurn = (ws: WebSocket, targetRoom: { id: string; row: number;
     if (result !== GameResult.IN_PROGRESS) {
       sendToClient(turn.currentTurn, {
         event: SocketEvents.GAME_RESULT,
-        data: { info: result },
+        data: result,
       });
       sendToClient(turn.nextTurn, {
         event: SocketEvents.GAME_RESULT,
-        data: { info: result },
+        data: result,
       });
       removeGameRoom(targetRoom.id);
     }
+  }
+};
+
+export const handleDisconnect = (ws: WebSocket) => {
+  const selectedRoom = rooms.filter((r) => r.players.has(ws));
+  for (const room of selectedRoom) {
+    rooms.splice(rooms.indexOf(room), 1);
+    sendToAllClients({ event: SocketEvents.REMOVE_ROOM, data: { id: room.id } });
+  }
+  const selectedGameRoom = Object.values(gameRooms).filter((r) => r.players.has(ws));
+  for (const gameRoom of selectedGameRoom) {
+    const iterator = gameRoom.players.keys();
+    const firstPlayer = iterator.next().value;
+    const secondPlayer = iterator.next().value;
+    const activePlayer = firstPlayer === ws ? secondPlayer : firstPlayer;
+    sendToClient(activePlayer, {
+      event: SocketEvents.GAME_RESULT,
+      data: gameRooms[gameRoom.id].players.get(activePlayer) === GameSymbol.X ? GameResult.X_WON : GameResult.O_WON,
+    });
+    delete gameRooms[gameRoom.id];
   }
 };

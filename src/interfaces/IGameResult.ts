@@ -1,6 +1,6 @@
 export enum GameResult {
   IN_PROGRESS,
-  DRAW = "Draw!",
-  X_WON = "X won!",
-  O_WON = "O won!",
+  DRAW = "DRAW",
+  X_WON = "X_WON",
+  O_WON = "O_WON",
 }

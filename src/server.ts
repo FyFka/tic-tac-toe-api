@@ -1,6 +1,14 @@
 import WebSocket from "ws";
 import { IRoom } from "./interfaces/IRoom";
-import { handleCanPlay, handleCreateRoom, handleGetRooms, handleJoinRoom, handlePing, handleTurn } from "./handlers";
+import {
+  handleCanPlay,
+  handleCreateRoom,
+  handleDisconnect,
+  handleGetRooms,
+  handleJoinRoom,
+  handlePing,
+  handleTurn,
+} from "./handlers";
 import { wss } from "./constants";
 import { sendToClient } from "./sender";
 import { IMessage, SocketEvents } from "./interfaces/IMessage";
@@ -39,5 +47,8 @@ wss.on("connection", (ws) => {
     } catch (err) {
       sendToClient(ws, { event: SocketEvents.UNKNOWN_EVENT, data: { info: "Unknown event" } });
     }
+  });
+  ws.on("close", () => {
+    handleDisconnect(ws);
   });
 });

@@ -9,7 +9,6 @@ export const toActiveGameRoom = (room: IGameRoom): IActiveGameRoom => {
   const iterator = room.players.keys();
   const firstPlayer = iterator.next().value;
   const secondPlayer = iterator.next().value;
-
   return {
     ...room,
     players: new Map([
