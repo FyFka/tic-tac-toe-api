@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "start": "concurrently --kill-others \"tsc -w\" \"nodemon dist/server.js\""
+    "dev": "concurrently --kill-others \"tsc -w\" \"nodemon dist/server.js\"",
+    "build": "tsc"
   },
   "devDependencies": {
     "@types/node": "^18.0.3",
